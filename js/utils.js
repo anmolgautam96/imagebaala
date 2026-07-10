@@ -33,13 +33,19 @@ function unitToPx(v, unit){
   return v;
 }
 
-/* Shared crop engine — used by crop.js and passport.js */
+/* ===== Shared Crop Engine (fixed aspect-lock formula) =====
+   opts.aspect is defined as HEIGHT/WIDTH ratio (e.g. 1 = square, 1.2857 = passport 3.5x4.5) */
 function createCropEngine(containerId, opts){
   let img=null, rotation=0, flipH=1, flipV=1, zoom=1;
   let box = {x:15,y:15,w:70,h:70};
   const wrap = document.getElementById(containerId);
 
-  function setImage(image){ img=image; rotation=0; flipH=1; flipV=1; zoom=1; box={x:15,y:15,w:70,h:70}; render(); }
+  function setImage(image){
+    img=image; rotation=0; flipH=1; flipV=1; zoom=1;
+    box={x:15,y:15,w:70,h:70};
+    render();
+    if(opts.aspect) setAspect(opts.aspect);
+  }
   function workingCanvas(){
     const swapped = rotation % 180 !== 0;
     const c = document.createElement('canvas');
@@ -72,10 +78,10 @@ function createCropEngine(containerId, opts){
     boxEl.style.width = box.w+'%'; boxEl.style.height = box.h+'%';
   }
   function clampBox(){
-    box.x = Math.max(0, Math.min(box.x, 100-box.w));
-    box.y = Math.max(0, Math.min(box.y, 100-box.h));
     box.w = Math.max(5, Math.min(box.w, 100));
     box.h = Math.max(5, Math.min(box.h, 100));
+    box.x = Math.max(0, Math.min(box.x, 100-box.w));
+    box.y = Math.max(0, Math.min(box.y, 100-box.h));
   }
   function attachDrag(){
     const stage = document.getElementById(containerId+'_stage');
@@ -92,14 +98,22 @@ function createCropEngine(containerId, opts){
       const dx = (e.clientX-start.mx)/rect.width*100;
       const dy = (e.clientY-start.my)/rect.height*100;
       let b = {...start.box};
-      if(mode==='move'){ b.x+=dx; b.y+=dy; }
-      else {
+      if(mode==='move'){
+        b.x+=dx; b.y+=dy;
+      } else {
         if(mode.includes('w')){ b.x=start.box.x+dx; b.w=start.box.w-dx; }
         if(mode.includes('e')){ b.w=start.box.w+dx; }
-        if(mode.includes('n')){ b.y=start.box.y+dy; b.h=start.box.h-dy; }
-        if(mode.includes('s')){ b.h=start.box.h+dy; }
-        if(opts.aspect){ b.h = b.w / opts.aspect * (stage.offsetWidth/stage.offsetHeight); }
+        if(!opts.aspect){
+          if(mode.includes('n')){ b.y=start.box.y+dy; b.h=start.box.h-dy; }
+          if(mode.includes('s')){ b.h=start.box.h+dy; }
+        }
+        if(opts.aspect){
+          // width se height derive karo — consistent, sahi ratio (no stretch)
+          b.h = b.w * opts.aspect * (stage.offsetWidth/stage.offsetHeight);
+          if(mode.includes('n')){ b.y = start.box.y + (start.box.h - b.h); }
+        }
       }
+      b.w = Math.max(5,b.w); b.h = Math.max(5,b.h);
       box = b; clampBox(); positionBox();
     });
     window.addEventListener('pointerup', ()=>{ if(mode){ mode=null; if(opts.onUpdate) opts.onUpdate(); } });
@@ -108,12 +122,19 @@ function createCropEngine(containerId, opts){
     opts.aspect=a;
     if(a){
       const stage=document.getElementById(containerId+'_stage');
-      const ratio = stage.offsetHeight/stage.offsetWidth;
-      box.h = box.w*a*ratio; clampBox(); positionBox();
+      if(stage){
+        box.h = box.w * a * (stage.offsetWidth/stage.offsetHeight);
+        clampBox(); positionBox();
+      }
     }
     if(opts.onUpdate) opts.onUpdate();
   }
-  function rotate(){ rotation=(rotation+90)%360; box={x:15,y:15,w:70,h:70}; render(); }
+  function rotate(){
+    rotation=(rotation+90)%360;
+    box={x:15,y:15,w:70,h:70};
+    render();
+    if(opts.aspect) setAspect(opts.aspect);
+  }
   function flip(axis){ if(axis==='h') flipH*=-1; else flipV*=-1; render(); }
   function setZoom(z){ zoom=z; render(); }
   function getCroppedCanvas(targetW, targetH){
@@ -128,3 +149,17 @@ function createCropEngine(containerId, opts){
   }
   return { setImage, setAspect, rotate, flip, setZoom, getCroppedCanvas };
 }
+
+/* Mobile hamburger drawer — har page pe kaam karega */
+document.addEventListener('DOMContentLoaded', ()=>{
+  const menuBtn = document.getElementById('menuBtn');
+  const drawer = document.getElementById('mobileDrawer');
+  if(menuBtn && drawer){
+    menuBtn.addEventListener('click', ()=>drawer.classList.toggle('open'));
+    document.addEventListener('click', e=>{
+      if(!drawer.contains(e.target) && e.target!==menuBtn && drawer.classList.contains('open')){
+        drawer.classList.remove('open');
+      }
+    });
+  }
+});

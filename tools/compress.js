@@ -13,9 +13,7 @@ cmpDrop.addEventListener('drop', e=>{
 cmpInput.addEventListener('change', e=>{ if(e.target.files[0]) handleCmpFile(e.target.files[0]); });
 document.addEventListener('paste', e=>{
   const items = e.clipboardData.items;
-  for(const it of items){
-    if(it.type.startsWith('image/')){ handleCmpFile(it.getAsFile()); break; }
-  }
+  for(const it of items){ if(it.type.startsWith('image/')){ handleCmpFile(it.getAsFile()); break; } }
 });
 
 async function handleCmpFile(file){
@@ -43,8 +41,21 @@ function buildCmpWorkspace(){
       </div>
       <div>
         <div class="panel">
+          <label class="field-label">Compression Mode</label>
+          <div class="chip-row" id="cmpMode">
+            <button class="chip active" data-v="quality">By Quality</button>
+            <button class="chip" data-v="target">By Target Size (KB)</button>
+          </div>
+        </div>
+        <div class="panel" id="cmpQualityPanel">
           <label class="field-label">Compression Quality — <span class="mono-tag" id="cmpQualLabel">80%</span></label>
           <input type="range" id="cmpQuality" min="10" max="100" value="80">
+        </div>
+        <div class="panel" id="cmpTargetPanel" style="display:none;">
+          <label class="field-label">Target File Size (KB)</label>
+          <input type="number" class="text-input" id="cmpTargetKB" placeholder="e.g. 30" value="30">
+          <button class="chip" id="cmpTargetBtn" style="margin-top:10px;">Compress to this size</button>
+          <p style="font-size:12px;color:var(--ink-soft);margin-top:8px;">Tool automatically finds the best quality to reach close to this size.</p>
         </div>
         <div class="panel">
           <div class="stat-row"><span>Original size</span><span class="v" id="cmpOrigSize">—</span></div>
@@ -62,23 +73,60 @@ function buildCmpWorkspace(){
   const qualLabel = document.getElementById('cmpQualLabel');
   let currentBlob = null;
 
-  function runCompress(){
-    const q = qualitySlider.value/100;
-    qualLabel.textContent = qualitySlider.value + '%';
-    const canvas = document.createElement('canvas');
-    canvas.width = cmpImg.naturalWidth; canvas.height = cmpImg.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(cmpImg,0,0);
-    canvas.toBlob(blob=>{
-      currentBlob = blob;
-      document.getElementById('cmpPreviewImg').src = URL.createObjectURL(blob);
-      document.getElementById('cmpNewSize').textContent = fmtBytes(blob.size);
-      const savedPct = Math.max(0, Math.round((1 - blob.size/cmpFile.size)*100));
-      document.getElementById('cmpSaved').textContent = savedPct + '%';
-    }, 'image/jpeg', q);
+  function drawAtQuality(q){
+    return new Promise(resolve=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = cmpImg.naturalWidth; canvas.height = cmpImg.naturalHeight;
+      canvas.getContext('2d').drawImage(cmpImg,0,0);
+      canvas.toBlob(blob=>resolve(blob), 'image/jpeg', q);
+    });
   }
-  qualitySlider.addEventListener('input', runCompress);
-  runCompress();
+
+  function updateStats(blob){
+    currentBlob = blob;
+    document.getElementById('cmpPreviewImg').src = URL.createObjectURL(blob);
+    document.getElementById('cmpNewSize').textContent = fmtBytes(blob.size);
+    const savedPct = Math.max(0, Math.round((1 - blob.size/cmpFile.size)*100));
+    document.getElementById('cmpSaved').textContent = savedPct + '%';
+  }
+
+  async function runQualityCompress(){
+    qualLabel.textContent = qualitySlider.value + '%';
+    const blob = await drawAtQuality(qualitySlider.value/100);
+    updateStats(blob);
+  }
+  qualitySlider.addEventListener('input', runQualityCompress);
+  runQualityCompress();
+
+  // ---- Mode toggle ----
+  document.getElementById('cmpMode').addEventListener('click', e=>{
+    if(!e.target.classList.contains('chip')) return;
+    [...e.currentTarget.children].forEach(c=>c.classList.remove('active'));
+    e.target.classList.add('active');
+    const mode = e.target.dataset.v;
+    document.getElementById('cmpQualityPanel').style.display = mode==='quality' ? 'block' : 'none';
+    document.getElementById('cmpTargetPanel').style.display = mode==='target' ? 'block' : 'none';
+  });
+
+  // ---- Target-size mode: binary search on quality ----
+  document.getElementById('cmpTargetBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('cmpTargetBtn');
+    const targetKB = parseFloat(document.getElementById('cmpTargetKB').value);
+    if(!targetKB || targetKB<=0) return;
+    btn.textContent = 'Compressing...';
+    let lo=0.05, hi=1, best=null;
+    for(let i=0;i<8;i++){
+      const mid = (lo+hi)/2;
+      const blob = await drawAtQuality(mid);
+      const sizeKB = blob.size/1024;
+      if(!best || Math.abs(sizeKB-targetKB) < Math.abs(best.blob.size/1024 - targetKB)){
+        best = {blob, q:mid};
+      }
+      if(sizeKB > targetKB) hi = mid; else lo = mid;
+    }
+    updateStats(best.blob);
+    btn.textContent = 'Compress to this size';
+  });
 
   document.getElementById('cmpDownloadBtn').addEventListener('click', ()=>{
     if(!currentBlob) return;

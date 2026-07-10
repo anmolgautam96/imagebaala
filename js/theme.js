@@ -19,10 +19,7 @@
   }
   
 })();
-document.addEventListener('DOMContentLoaded', ()=>{
-  const menuBtn = document.getElementById('menuBtn');
-  const drawer = document.getElementById('mobileDrawer');
-  if(menuBtn && drawer){
+if(menuBtn && drawer){
     menuBtn.addEventListener('click', ()=>drawer.classList.toggle('open'));
     document.addEventListener('click', e=>{
       if(!drawer.contains(e.target) && e.target!==menuBtn && drawer.classList.contains('open')){
@@ -30,4 +27,3 @@ document.addEventListener('DOMContentLoaded', ()=>{
       }
     });
   }
-});

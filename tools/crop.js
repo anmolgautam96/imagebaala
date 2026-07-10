@@ -97,6 +97,8 @@ function applyCropExactSize(){
   const unit = document.getElementById('cropUnit').value;
   if(!w || !h) return;
   cropTargetPx = {w:Math.round(unitToPx(w,unit)), h:Math.round(unitToPx(h,unit))};
+  document.querySelectorAll('#cropAspect .chip').forEach(c=>c.classList.remove('active'));
+  cropEngine.setAspect(h/w); // box ka shape ab exact size ke ratio mein lock ho jayega
   updateCropPreview();
 }
 
