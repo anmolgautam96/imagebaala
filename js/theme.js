@@ -19,11 +19,3 @@
   }
   
 })();
-if(menuBtn && drawer){
-    menuBtn.addEventListener('click', ()=>drawer.classList.toggle('open'));
-    document.addEventListener('click', e=>{
-      if(!drawer.contains(e.target) && e.target!==menuBtn && drawer.classList.contains('open')){
-        drawer.classList.remove('open');
-      }
-    });
-  }
